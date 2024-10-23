@@ -1,0 +1,68 @@
+const {
+    quote
+} = require("@mengkodingan/ckptw");
+const axios = require("axios");
+const {
+    MessageType
+} = require("@mengkodingan/ckptw/lib/Constant");
+const mime = require("mime-types");
+
+module.exports = {
+    name: "gemini",
+    category: "ai",
+    handler: {
+        banned: true,
+        cooldown: true,
+        coin: [10, "text", 1]
+    },
+    code: async (ctx) => {
+        const {
+            status,
+            message
+        } = await global.handler(ctx, module.exports.handler);
+        if (status) return await ctx.reply(message);
+
+        const input = ctx.args.join(" ") || null;
+
+        if (!input) return await ctx.reply(
+            `${quote(global.tools.msg.generateInstruction(["send"], ["text", "image"]))}\n` +
+            `${quote(global.tools.msg.generateCommandExample(ctx._used.prefix + ctx._used.command, "apa itu bot whatsapp?"))}\n` +
+            quote(global.tools.msg.generateNotes(["AI ini dapat melihat gambar dan menjawab pertanyaan tentangnya. Kirim gambar dan tanyakan apa saja!"]))
+        );
+
+        const msgType = ctx.getMessageType();
+        const [checkMedia, checkQuotedMedia] = await Promise.all([
+            global.tools.general.checkMedia(msgType, "image", ctx),
+            global.tools.general.checkQuotedMedia(ctx.quoted, "image")
+        ]);
+
+        try {
+            if (checkMedia || checkQuotedMedia) {
+                const buffer = await ctx.msg.media.toBuffer() || await ctx.quoted?.media.toBuffer();
+                const uploadUrl = await global.tools.general.upload(buffer);
+                const apiUrl = global.tools.api.createUrl("sandipbaruwal", "/gemini2", {
+                    prompt: input,
+                    url: uploadUrl
+                });
+                const {
+                    data
+                } = await axios.get(apiUrl);
+
+                return await ctx.reply(data.answer);
+            } else {
+                const apiUrl = global.tools.api.createUrl("sandipbaruwal", "/gemini", {
+                    prompt: input
+                });
+                const {
+                    data
+                } = await axios.get(apiUrl);
+
+                return await ctx.reply(data.answer);
+            }
+        } catch (error) {
+            console.error(`[${global.config.pkg.name}] Error:`, error);
+            if (error.status !== 200) return await ctx.reply(global.config.msg.notFound);
+            return await ctx.reply(quote(`❎ Terjadi kesalahan: ${error.message}`));
+        }
+    }
+};
